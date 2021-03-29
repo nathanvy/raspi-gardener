@@ -1,4 +1,4 @@
-#! /usr/local/bin/python3
+#! /usr//bin/python3
 
 import sys
 import irc.bot
@@ -12,25 +12,81 @@ from irc.client import ip_numstr_to_quad, ip_quad_to_numstr
 
 #these are in seconds as a proxy for the time constant tau
 sufficientlywet = 0.005
-sufficientlydry = 0.001
+sufficientlydry = 0.025
 
 measurementPin = 24
 chargePin = 23
 
+# yeah it's global state fight me irl
 begintime = 0
+rollingAvg = 0
+divisor = 0
     
 class LeetBot(irc.bot.SingleServerIRCBot):
     def __init__(self, channel, nickname, server, port=6667):
         irc.bot.SingleServerIRCBot.__init__(self, [(server, port, "hippo")], nickname, nickname)
         self.channel = channel
 
-        self.scan_interval = 60 #seconds
+        self.report_interval = 28800 #8 hours
+        self.scan_interval = 3600 #1 hour
         s = self.reactor.scheduler
         s.execute_every( self.scan_interval, self.startscan )
-
+        s.execute_every( self.report_interval, self.reportdata )
         GPIO.add_event_callback( measurementPin, callback=lambda x: self.edge_callback() )
 
-    #where the sausage gets made
+    # overrides        
+    def start(self):
+        """Start the bot."""
+        try:
+            server = self.servers.peek()
+            self.connect(
+                server.host,
+                server.port,
+                self._nickname,
+                server.password,
+                ircname=self._realname,
+            )
+            
+        except irc.client.ServerConnectionError:
+            sys.exit(69) # ladies...
+
+        irc.client.SimpleIRCClient.start(self)
+                
+    def reportdata(self):
+        global divisor
+        global rollingAvg
+
+        if divisor <= 1:
+            divisor = 1
+            
+        avg = rollingAvg / divisor
+        #logging.info("gardener: {timestamp} -- {avg}".format( timestamp=time.asctime(), avg=avg ))
+        self.connection.privmsg( self.channel, "Average: {avg}".format(avg=avg) )
+
+        if avg < sufficientlydry:
+            alert( avg )
+        
+        rollingAvg = 0
+        divisor = 0
+
+    def take_snapshot(self):
+        global begintime
+        global divisor
+        global rollingAvg
+        
+        if begintime != 0:
+            self.connection.privmsg( self.channel, "A scan is currently running, try again in a few seconds." )
+        elif divisor == 0:
+            self.connection.privmsg( self.channel, "A scan has not been run since the last report.  I have initiated a scan, try again shortly." )
+            self.startscan()
+        else:
+            current = rollingAvg / divisor
+            self.connection.privmsg( self.channel, "Current rolling average sits at {avg}".format( avg = current ) )
+            
+    def alert(self, value):
+        #logging.info("gardener: alerting based on detected value = {reading}".format( reading=value ) )
+        self.connection.privmsg( self.channel, "nathan: Sensor reading below threshold ({reading})!".format(reading=value) )
+        
     def startscan(self):
         global begintime
         begintime = time.clock_gettime(time.CLOCK_MONOTONIC)
@@ -38,10 +94,23 @@ class LeetBot(irc.bot.SingleServerIRCBot):
 
     def edge_callback(self):
         global begintime
-        t = time.clock_gettime(time.CLOCK_MONOTONIC)
+        global rollingAvg
+        global divisor
+
+        #there seems to be a hardware-level bug where edges are spuriously detected, so:
+        if begintime == 0:
+            return
+
+        # reason this works is that we shouldn't see any rising edges until startscan() gets called
+        # and startscan() is responsible for setting begintime != 0
+        #
+        # therefore spurious events will see begintime == 0 and we can ignore.
+        
+        t = time.clock_gettime(time.CLOCK_MONOTONIC) - begintime
         GPIO.output( chargePin, GPIO.LOW ) #reset it for the next run
-        self.connection.privmsg( self.channel, "I measured {first} and {second} for t2 - t1 = {ans}".format(first=t, second=begintime, ans=t-begintime ))
-        begintime = 0        
+        begintime = 0
+        rollingAvg += t
+        divisor += 1     
         
     def on_nicknameinuse( self, c, e ):
         c.nick(c.get_nickname() + "_")
@@ -63,10 +132,13 @@ class LeetBot(irc.bot.SingleServerIRCBot):
         nick = e.source.nick
         c = self.connection
 
-        c.privmsg( self.channel, "Commands are disabled")
+        #c.privmsg( self.channel, "Commands are disabled")
         
-        # if cmd == "disconnect":
-        #     self.disconnect()
+        if cmd == "snapshot":
+            self.take_snapshot()
+        else:
+            c.privmsg( self.channel, "Invalid command" )
+            
         # elif cmd == "die":
         #     self.die()
         # elif cmd == "stats":
@@ -93,8 +165,8 @@ class LeetBot(irc.bot.SingleServerIRCBot):
 
 
 # so you have something like
-#   GPIO23                      GPIO24                                        GND
-#     |                                        |                                                   |
+#   GPIO23              GPIO24                         GND
+#     |                   |                             |
 #     +-----[47kOhm]------+---------| capacitor  |------+
 #
 # and you want to measure when the voltage drop across the resistor is 0 because that means
@@ -102,19 +174,21 @@ class LeetBot(irc.bot.SingleServerIRCBot):
 #
 # Conveniently, for a charging capacitor, 1 - e^-1 = 0.632 or 63.2% and it just so happens that 63.2% of 3V3 CMOS logic is 2.08V which loosely corresponds
 # to the minimum input voltage to be considered a "high" which is 2 volts.
+#
+# not that it really matters because it's a proxy measurement anyways.
 
 def main():
-    print("Raspi Gardener version 1.3.3.7 initializing...")
+    logging.info("gardener: Raspi Gardener version 1.3.3.7 initializing...")
     #GPIO.setwarnings( False )
     GPIO.setmode( GPIO.BCM ) #so-called "broadcom numbering" which is logical numbering not physical pins
 
-    GPIO.setup( chargePin, GPIO.OUT)
+    GPIO.setup( chargePin, GPIO.OUT )
     GPIO.setup( measurementPin, GPIO.IN )
     GPIO.output( chargePin, GPIO.LOW )
     GPIO.add_event_detect( measurementPin, GPIO.RISING )
     
     bot = LeetBot("#bots", "raspi3bplus", "irc.squishynet.net", 6667)
-    print("Initialization complete.  Connecting to IRC.")
+    logging.info("gardener: Initialization complete.  Connecting to IRC.")
     bot.start()
 
 
