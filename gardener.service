@@ -1,0 +1,14 @@
+[Unit]
+Description=Raspberry Pi Gardener
+After=systemd-networkd-wait-online.service
+Requires=systemd-networkd-wait-online.service
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi
+ExecStart=/usr/bin/python3 /home/pi/ircbot.py
+Restart=always
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target
