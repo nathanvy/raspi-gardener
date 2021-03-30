@@ -24,7 +24,7 @@ divisor = 0
     
 class LeetBot(irc.bot.SingleServerIRCBot):
     def __init__(self, channel, nickname, server, port=6667):
-        irc.bot.SingleServerIRCBot.__init__(self, [(server, port, "hippo")], nickname, nickname)
+        irc.bot.SingleServerIRCBot.__init__(self, [(server, port, "serverpassword")], nickname, nickname)
         self.channel = channel
 
         self.report_interval = 28800 #8 hours
@@ -187,7 +187,7 @@ def main():
     GPIO.output( chargePin, GPIO.LOW )
     GPIO.add_event_detect( measurementPin, GPIO.RISING )
     
-    bot = LeetBot("#bots", "raspi3bplus", "irc.squishynet.net", 6667)
+    bot = LeetBot("#channel", "ircnickname", "irc.server.net", 6667)
     logging.info("gardener: Initialization complete.  Connecting to IRC.")
     bot.start()
 
