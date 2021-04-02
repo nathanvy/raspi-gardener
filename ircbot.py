@@ -64,7 +64,7 @@ class LeetBot(irc.bot.SingleServerIRCBot):
         self.connection.privmsg( self.channel, "Average: {avg}".format(avg=avg) )
 
         if avg < sufficientlydry:
-            alert( avg )
+            self.alert( avg )
         
         rollingAvg = 0
         divisor = 0
