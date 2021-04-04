@@ -12,7 +12,7 @@ from irc.client import ip_numstr_to_quad, ip_quad_to_numstr
 
 #these are in seconds as a proxy for the time constant tau
 sufficientlywet = 0.005
-sufficientlydry = 0.025
+sufficientlydry = 0.0004
 
 measurementPin = 24
 chargePin = 23
@@ -24,7 +24,7 @@ divisor = 0
     
 class LeetBot(irc.bot.SingleServerIRCBot):
     def __init__(self, channel, nickname, server, port=6667):
-        irc.bot.SingleServerIRCBot.__init__(self, [(server, port, "serverpassword")], nickname, nickname)
+        irc.bot.SingleServerIRCBot.__init__(self, [(server, port, "hippo")], nickname, nickname)
         self.channel = channel
 
         self.report_interval = 28800 #8 hours
@@ -136,6 +136,14 @@ class LeetBot(irc.bot.SingleServerIRCBot):
         
         if cmd == "snapshot":
             self.take_snapshot()
+        elif cmd == "setlevel":
+            try:
+                tmp = float(e.arguments[2])
+                global sufficientlydry
+                sufficientlydry = tmp
+                c.privmsg( self.channel, "ok I have set lower threshold to {v}".format(v=sufficientlydry) )
+            except:
+                c.privmsg( self.channel, "Invalid argument" )
         else:
             c.privmsg( self.channel, "Invalid command" )
             
@@ -179,7 +187,8 @@ class LeetBot(irc.bot.SingleServerIRCBot):
 
 def main():
     logging.info("gardener: Raspi Gardener version 1.3.3.7 initializing...")
-    #GPIO.setwarnings( False )
+    GPIO.setwarnings( False )
+    #GPIO.cleanup()
     GPIO.setmode( GPIO.BCM ) #so-called "broadcom numbering" which is logical numbering not physical pins
 
     GPIO.setup( chargePin, GPIO.OUT )
@@ -187,7 +196,7 @@ def main():
     GPIO.output( chargePin, GPIO.LOW )
     GPIO.add_event_detect( measurementPin, GPIO.RISING )
     
-    bot = LeetBot("#channel", "ircnickname", "irc.server.net", 6667)
+    bot = LeetBot("#bots", "raspi3", "irc.squishynet.net", 6667)
     logging.info("gardener: Initialization complete.  Connecting to IRC.")
     bot.start()
 
