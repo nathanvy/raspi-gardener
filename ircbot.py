@@ -124,11 +124,12 @@ class LeetBot(irc.bot.SingleServerIRCBot):
     def on_pubmsg( self, c, e ):
         a = e.arguments[0].split( ":", 1 )
         if len(a) > 1 and irc.strings.lower(a[0]) == irc.strings.lower(self.connection.get_nickname()):
-            self.do_command(e, a[1].strip())
+            line = e.arguments[0].split( " " )
+            self.do_command(e, line[1])
         return
 
     # stolen from some random github example
-    def do_command(self, e, cmd):
+    def do_command(self, e, cmd ):
         nick = e.source.nick
         c = self.connection
 
@@ -138,12 +139,13 @@ class LeetBot(irc.bot.SingleServerIRCBot):
             self.take_snapshot()
         elif cmd == "setlevel":
             try:
-                tmp = float(e.arguments[2])
+                line = e.arguments[0].split( " " )
+                tmp = float(line[2])
                 global sufficientlydry
                 sufficientlydry = tmp
                 c.privmsg( self.channel, "ok I have set lower threshold to {v}".format(v=sufficientlydry) )
             except:
-                c.privmsg( self.channel, "Invalid argument" )
+                c.privmsg( self.channel, "Invalid argument: {a}" )
         else:
             c.privmsg( self.channel, "Invalid command" )
             
