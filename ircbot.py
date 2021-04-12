@@ -11,8 +11,10 @@ import RPi.GPIO as GPIO
 from irc.client import ip_numstr_to_quad, ip_quad_to_numstr
 
 #these are in seconds as a proxy for the time constant tau
-sufficientlywet = 0.005
+sufficientlywet = 0.0005
 sufficientlydry = 0.0004
+
+mytarget = "target not set"
 
 measurementPin = 24
 chargePin = 23
@@ -23,8 +25,8 @@ rollingAvg = 0
 divisor = 0
     
 class LeetBot(irc.bot.SingleServerIRCBot):
-    def __init__(self, channel, nickname, server, port=6667):
-        irc.bot.SingleServerIRCBot.__init__(self, [(server, port, "hippo")], nickname, nickname)
+    def __init__(self, channel, nickname, server, port=6667, password):
+        irc.bot.SingleServerIRCBot.__init__(self, [(server, port, password)], nickname, nickname)
         self.channel = channel
 
         self.report_interval = 28800 #8 hours
@@ -84,8 +86,9 @@ class LeetBot(irc.bot.SingleServerIRCBot):
             self.connection.privmsg( self.channel, "Current rolling average sits at {avg}".format( avg = current ) )
             
     def alert(self, value):
+        global mytarget
         #logging.info("gardener: alerting based on detected value = {reading}".format( reading=value ) )
-        self.connection.privmsg( self.channel, "nathan: Sensor reading below threshold ({reading})!".format(reading=value) )
+        self.connection.privmsg( self.channel, "nathan: {target} is too dry ({reading})!".format(reading=value, target=mytarget) )
         
     def startscan(self):
         global begintime
@@ -145,7 +148,10 @@ class LeetBot(irc.bot.SingleServerIRCBot):
                 sufficientlydry = tmp
                 c.privmsg( self.channel, "ok I have set lower threshold to {v}".format(v=sufficientlydry) )
             except:
-                c.privmsg( self.channel, "Invalid argument: {a}" )
+                c.privmsg( self.channel, "Invalid argument" )
+        elif cmd == "chanop":
+            # danger, will robinson, don't use this on public channels unless you know what you're doing
+            self.channel.set_mode('o', 'nathan')
         else:
             c.privmsg( self.channel, "Invalid command" )
             
@@ -198,7 +204,7 @@ def main():
     GPIO.output( chargePin, GPIO.LOW )
     GPIO.add_event_detect( measurementPin, GPIO.RISING )
     
-    bot = LeetBot("#bots", "raspi3", "irc.squishynet.net", 6667)
+    bot = LeetBot("#channel", "raspi-gardener", "irc.somewhere.net", 6667, "password")
     logging.info("gardener: Initialization complete.  Connecting to IRC.")
     bot.start()
 
